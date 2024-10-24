@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 import configparser
+from pathlib import Path
 
 class ConfigReader:
     def __init__(self, config_path):
@@ -12,10 +13,11 @@ class ConfigReader:
         config = configparser.ConfigParser()
         config.read(config_path)
         return {
-            'csv_path': config['DEFAULT']['csv_path'],
+            'csv_folder_path': config['DEFAULT']['csv_folder_path'],
             'pixel_size': float(config['DEFAULT']['pixel_size']),
             'time_between_frames': float(config['DEFAULT']['time_between_frames']),
-            'save_filtered': config['DEFAULT'].getboolean('save_filtered')
+            'save_filtered': config['DEFAULT'].getboolean('save_filtered'),
+            'sigma': float(config['DEFAULT'].get('sigma', 0.0))
         }
 
     def get(self, key):
@@ -44,6 +46,7 @@ class TrackProcessor:
         return df.groupby('track_id').apply(self.process_group).reset_index(drop=True)
 
     def process_group(self, group):
+    
         group = group.sort_values(by='frame_y').reset_index(drop=True)
         group = self.compute_rolling(group)
         group = self.eliminate_short_sequences(group)
@@ -321,15 +324,14 @@ def create_output_directory(input_file):
     
     return output_dir
 
-def main(config_path):
-    config = ConfigReader(config_path)
-    
-    # Get the input file path
-    csv_path = config.get('csv_path')
+def process_single_file(config, csv_path, output_dir):
+    """Processes a single CSV file and saves the results.
 
-    # Create the output directory
-    output_dir = create_output_directory(csv_path)
-    
+    Args:
+        config (ConfigReader): The configuration object.
+        csv_path (str): Path to the input CSV file.
+        output_dir (str): Path to the output directory.
+    """
     # Define file paths inside the new directory
     csv_path_output = os.path.join(output_dir, 'processed_data.csv')
     csv_path_output_stats = os.path.join(output_dir, 'statistics.csv')
@@ -356,6 +358,11 @@ def main(config_path):
 
     sigma_y = statistics_calculator.calculate_sigma(statistics_df)
 
+    if config.get('sigma') > 0:
+        sigma_y = config.get('sigma')
+    
+    print(f"Using sigma = {sigma_y}")
+    
     # Use SigmaDisplacementFilter to update both DataFrames
     sigma_filter = SigmaDisplacementFilter(sigma_y)
     processed_df, statistics_df = sigma_filter.update_both(processed_df, statistics_df)
@@ -379,6 +386,26 @@ def main(config_path):
     })
 
     print(f"Saved all output files in directory: {output_dir}")
+
+def main(config_path):
+    config = ConfigReader(config_path)
+    
+    # Get the input file path
+    folder_path = config.get('csv_folder_path')
+    print(folder_path)
+    for filename in os.listdir(folder_path):
+        print(filename)
+        if filename.endswith(".csv"):
+            # Construct the full path to the CSV file
+            csv_path = os.path.join(folder_path, filename)
+
+            # Create the output directory for the current file
+            output_dir = create_output_directory(csv_path)
+
+            # Process the single file
+            process_single_file(config, csv_path, output_dir)
+    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process configuration file for script.")

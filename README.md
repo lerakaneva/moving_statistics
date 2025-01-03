@@ -37,7 +37,7 @@ sigma = 1.0 # Sigma for displacement filtering (0.0 to use calculated sigma)
 
 2. **Run the analysis:**
 ```
-python main.py config.ini 
+python main.py --config config_example.ini
 ```
 
 ## Output
